@@ -1,3 +1,32 @@
+/// A sortable library for Gleam/Lustre that provides drag and drop functionality
+/// for reordering items in a list. Supports both mouse/desktop and touch/mobile interactions.
+///
+/// ## Features
+/// 
+/// - **Desktop Support**: Full HTML5 drag and drop API support
+/// - **Mobile Support**: Touch events for drag and drop on mobile devices
+/// - **Customizable**: Configurable CSS classes for styling
+/// - **Framework Agnostic**: No built-in CSS framework dependencies
+/// - **Type Safe**: Fully typed with Gleam's type system
+///
+/// ## Basic Usage
+///
+/// ```gleam
+/// import sortable
+/// 
+/// let config = sortable.default_config(
+///   fn(from, to) { MyReorderMsg(from, to) },
+///   "my-sortable-container"
+/// )
+/// 
+/// sortable.sortable_container(
+///   config,
+///   drag_state,
+///   items,
+///   render_item_fn
+/// )
+/// ```
+
 import gleam/bool
 import gleam/dynamic/decode
 import gleam/int
@@ -8,6 +37,15 @@ import lustre/element.{type Element}
 import lustre/element/html
 import lustre/event
 
+/// Configuration for a sortable container.
+/// 
+/// - `on_reorder`: Callback function called when items are reordered with (from_index, to_index)
+/// - `container_id`: HTML id attribute for the container element
+/// - `container_class`: CSS classes to apply to the container (e.g., grid layout classes)
+/// - `item_class`: CSS class for individual sortable items
+/// - `dragging_class`: CSS class applied to the item being dragged
+/// - `drag_over_class`: CSS class applied to the item being dragged over
+/// - `ghost_class`: CSS class for the drag ghost/placeholder
 pub type SortableConfig(msg) {
   SortableConfig(
     on_reorder: fn(Int, Int) -> msg,
@@ -20,16 +58,50 @@ pub type SortableConfig(msg) {
   )
 }
 
+/// Represents the current drag state of the sortable container.
+/// 
+/// - `NoDrag`: No drag operation in progress
+/// - `Dragging`: Desktop drag in progress with source index and optional target index
+/// - `TouchDragging`: Mobile touch drag in progress with source and optional target index
 pub type DragState {
   NoDrag
   Dragging(source_index: Int, over_index: Option(Int))
   TouchDragging(source_index: Int, over_index: Option(Int))
 }
 
+/// A wrapper for items in a sortable list. The type is opaque to ensure
+/// proper encapsulation of the item data and metadata.
+/// 
+/// Use `create_sortable_item` to create instances and accessor functions
+/// to retrieve data.
 pub opaque type SortableItem(a) {
   SortableItem(id: String, data: a)
 }
 
+/// Creates a default sortable configuration with standard CSS classes.
+/// 
+/// ## Arguments
+/// 
+/// - `on_reorder`: Function called when items are reordered, receives (from_index, to_index)
+/// - `container_id`: HTML id for the sortable container element
+/// 
+/// ## Returns
+/// 
+/// A `SortableConfig` with default CSS classes:
+/// - Container: "sortable-container"
+/// - Item: "sortable-item"  
+/// - Dragging: "sortable-dragging"
+/// - Drag over: "sortable-drag-over"
+/// - Ghost: "sortable-ghost"
+/// 
+/// ## Example
+/// 
+/// ```gleam
+/// let config = sortable.default_config(
+///   fn(from, to) { ReorderImages(from, to) },
+///   "image-grid"
+/// )
+/// ```
 pub fn default_config(
   on_reorder: fn(Int, Int) -> msg,
   container_id: String,
@@ -45,6 +117,32 @@ pub fn default_config(
   )
 }
 
+/// Creates a sortable container element that handles drag and drop interactions.
+/// 
+/// ## Arguments
+/// 
+/// - `config`: Configuration for the sortable container
+/// - `drag_state`: Current drag state (should be managed in your application state)
+/// - `items`: List of sortable items to render
+/// - `render_item`: Function to render individual items, receives (item, index, drag_state)
+/// 
+/// ## Returns
+/// 
+/// A Lustre `Element` that handles drag and drop events and renders the sortable items.
+/// The element emits `SortableMsg` events that should be handled in your update function.
+/// 
+/// ## Example
+/// 
+/// ```gleam
+/// sortable.sortable_container(
+///   config,
+///   model.drag_state,
+///   model.items |> list.index_map(fn(item, i) {
+///     sortable.create_sortable_item("item-" <> int.to_string(i), item)
+///   }),
+///   fn(item, index, drag_state) { render_my_item(item, index, drag_state) }
+/// )
+/// ```
 pub fn sortable_container(
   config: SortableConfig(msg),
   drag_state: DragState,
@@ -147,6 +245,25 @@ fn render_sortable_item(
   )
 }
 
+/// Messages emitted by the sortable container during drag and drop interactions.
+/// These should be handled in your application's update function.
+/// 
+/// ## Desktop Events
+/// - `StartDrag(index)`: User starts dragging an item
+/// - `DragOver(index)`: User drags over an item  
+/// - `DragEnter(index)`: User drags into an item's area
+/// - `DragLeave`: User drags out of an item's area
+/// - `Drop(index)`: User drops an item at a position
+/// - `DragEnd`: Drag operation ends (cleanup)
+/// 
+/// ## Mobile Events  
+/// - `TouchStart(index)`: User starts touch drag
+/// - `TouchMove`: User moves finger during drag
+/// - `TouchEnd`: User ends touch drag
+/// - `TouchEnter(index)`: Touch drag enters an item's area
+/// 
+/// ## Other
+/// - `UserMsg(msg)`: Wrapper for user-defined messages from item rendering
 pub type SortableMsg(msg) {
   StartDrag(Int)
   DragOver(Int)
@@ -161,6 +278,26 @@ pub type SortableMsg(msg) {
   UserMsg(msg)
 }
 
+/// Reorders a list by moving an item from one index to another.
+/// 
+/// ## Arguments
+/// 
+/// - `items`: The list to reorder
+/// - `from_index`: The current index of the item to move
+/// - `to_index`: The new index where the item should be placed
+/// 
+/// ## Returns
+/// 
+/// A new list with the item moved to the new position. If indices are invalid
+/// or the same, returns the original list unchanged.
+/// 
+/// ## Example
+/// 
+/// ```gleam
+/// let items = [1, 2, 3, 4, 5]
+/// let reordered = sortable.reorder_list(items, 1, 3)
+/// // Result: [1, 3, 4, 2, 5] (moved item at index 1 to index 3)
+/// ```
 pub fn reorder_list(items: List(a), from_index: Int, to_index: Int) -> List(a) {
   case from_index == to_index {
     True -> items
@@ -195,15 +332,61 @@ pub fn reorder_list(items: List(a), from_index: Int, to_index: Int) -> List(a) {
   }
 }
 
+/// Creates a new sortable item with the given id and data.
+/// 
+/// ## Arguments
+/// 
+/// - `id`: Unique identifier for the item (used for DOM element ids)
+/// - `data`: The actual data to store in this sortable item
+/// 
+/// ## Returns
+/// 
+/// A `SortableItem` that can be used in sortable containers.
+/// 
+/// ## Example
+/// 
+/// ```gleam
+/// let item = sortable.create_sortable_item("image-1", my_image_data)
+/// ```
 pub fn create_sortable_item(id: String, data: a) -> SortableItem(a) {
   SortableItem(id: id, data: data)
 }
 
-pub fn get_item_data(item: SortableItem(a)) -> a {
+/// Extracts the data from a sortable item.
+/// 
+/// ## Arguments
+/// 
+/// - `item`: The sortable item to extract data from
+/// 
+/// ## Returns
+/// 
+/// The original data that was stored in the item.
+/// 
+/// ## Example
+/// 
+/// ```gleam
+/// let data = sortable.item_data(item)
+/// ```
+pub fn item_data(item: SortableItem(a)) -> a {
   item.data
 }
 
-pub fn get_item_id(item: SortableItem(a)) -> String {
+/// Gets the unique identifier of a sortable item.
+/// 
+/// ## Arguments
+/// 
+/// - `item`: The sortable item to get the id from
+/// 
+/// ## Returns
+/// 
+/// The string id that was assigned to the item.
+/// 
+/// ## Example
+/// 
+/// ```gleam
+/// let id = sortable.item_id(item)
+/// ```
+pub fn item_id(item: SortableItem(a)) -> String {
   item.id
 }
 
@@ -249,6 +432,42 @@ fn touch_enter_decoder(index: Int) -> decode.Decoder(SortableMsg(msg)) {
   decode.success(TouchEnter(index))
 }
 
+/// Updates the drag state based on sortable messages and returns reorder information.
+/// 
+/// This function should be called from your application's update function when
+/// handling `SortableMsg` events. It manages the drag state and returns information
+/// about when items should be reordered.
+/// 
+/// ## Arguments
+/// 
+/// - `sortable_msg`: The sortable message to process
+/// - `drag_state`: The current drag state
+/// 
+/// ## Returns
+/// 
+/// A tuple containing:
+/// 1. The new `DragState` after processing the message
+/// 2. `Option(#(Int, Int))` - `Some(#(from_index, to_index))` if items should be reordered, `None` otherwise
+/// 
+/// ## Example
+/// 
+/// ```gleam
+/// // In your update function
+/// MyMsg(sortable_msg) -> {
+///   let #(new_drag_state, maybe_reorder) = 
+///     sortable.update_sortable(sortable_msg, model.drag_state)
+///   
+///   case maybe_reorder {
+///     Some(#(from, to)) -> {
+///       let new_items = sortable.reorder_list(model.items, from, to)
+///       #(Model(..model, items: new_items, drag_state: new_drag_state), effect.none())
+///     }
+///     None -> {
+///       #(Model(..model, drag_state: new_drag_state), effect.none())
+///     }
+///   }
+/// }
+/// ```
 pub fn update_sortable(
   sortable_msg: SortableMsg(msg),
   drag_state: DragState,

@@ -32,8 +32,8 @@ pub fn reorder_list_test() {
 pub fn sortable_item_test() {
   let item = sortable.create_sortable_item("test-id", "Test Data")
 
-  let assert "test-id" = sortable.get_item_id(item)
-  let assert "Test Data" = sortable.get_item_data(item)
+  let assert "test-id" = sortable.item_id(item)
+  let assert "Test Data" = sortable.item_data(item)
 }
 
 pub fn update_sortable_test() {
