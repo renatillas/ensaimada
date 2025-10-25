@@ -79,7 +79,11 @@ pub fn update_sortable_test() {
 
   // Test drop
   let #(final_state, maybe_reorder3) =
-    sortable.update_sortable(sortable.Drop("test-container", 3), new_state2, config)
+    sortable.update_sortable(
+      sortable.Drop("test-container", 3),
+      new_state2,
+      config,
+    )
   let assert sortable.NoDrag = final_state
   let assert option.Some(sortable.SameContainer(1, 3)) = maybe_reorder3
 }

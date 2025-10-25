@@ -211,9 +211,12 @@ fn render_sortable_item(
   }
 
   let is_drag_over = case drag_state {
-    Dragging(source_container, source_index, Some(over_container), Some(
-      over_index,
-    )) ->
+    Dragging(
+      source_container,
+      source_index,
+      Some(over_container),
+      Some(over_index),
+    ) ->
       over_container == config.container_id
       && over_index == index
       && { source_container != config.container_id || source_index != index }
@@ -547,9 +550,12 @@ pub fn update_sortable(
 
           case accepts {
             True -> #(
-              Dragging(source_container, source_index, Some(container_id), Some(
-                index,
-              )),
+              Dragging(
+                source_container,
+                source_index,
+                Some(container_id),
+                Some(index),
+              ),
               None,
             )
             False -> #(drag_state, None)
@@ -580,10 +586,7 @@ pub fn update_sortable(
       case drag_state {
         Dragging(source_container, source_index, _, _) -> {
           case source_container == container_id {
-            True -> #(
-              NoDrag,
-              Some(SameContainer(source_index, target_index)),
-            )
+            True -> #(NoDrag, Some(SameContainer(source_index, target_index)))
             False -> {
               // Check if drop is allowed
               let accepts = list.contains(config.accept_from, source_container)
@@ -604,10 +607,7 @@ pub fn update_sortable(
         }
         TouchDragging(source_container, source_index, _, _) -> {
           case source_container == container_id {
-            True -> #(
-              NoDrag,
-              Some(SameContainer(source_index, target_index)),
-            )
+            True -> #(NoDrag, Some(SameContainer(source_index, target_index)))
             False -> {
               let accepts = list.contains(config.accept_from, source_container)
               case accepts {
@@ -629,14 +629,14 @@ pub fn update_sortable(
       }
     DragEnd ->
       case drag_state {
-        Dragging(source_container, source_index, Some(target_container), Some(
-          target_index,
-        )) -> {
+        Dragging(
+          source_container,
+          source_index,
+          Some(target_container),
+          Some(target_index),
+        ) -> {
           case source_container == target_container {
-            True -> #(
-              NoDrag,
-              Some(SameContainer(source_index, target_index)),
-            )
+            True -> #(NoDrag, Some(SameContainer(source_index, target_index)))
             False -> {
               let accepts = list.contains(config.accept_from, source_container)
               case accepts {
@@ -665,7 +665,10 @@ pub fn update_sortable(
       case drag_state {
         TouchDragging(source_container, source_index, over_container, _) -> {
           // Keep current state during move
-          #(TouchDragging(source_container, source_index, over_container, None), None)
+          #(
+            TouchDragging(source_container, source_index, over_container, None),
+            None,
+          )
         }
         _ -> #(drag_state, None)
       }
@@ -678,10 +681,7 @@ pub fn update_sortable(
           Some(target_index),
         ) -> {
           case source_container == target_container {
-            True -> #(
-              NoDrag,
-              Some(SameContainer(source_index, target_index)),
-            )
+            True -> #(NoDrag, Some(SameContainer(source_index, target_index)))
             False -> {
               let accepts = list.contains(config.accept_from, source_container)
               case accepts {
