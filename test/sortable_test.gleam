@@ -39,21 +39,47 @@ pub fn sortable_item_test() {
 pub fn update_sortable_test() {
   let initial_state = sortable.NoDrag
 
+  let config =
+    sortable.SortableConfig(
+      on_reorder: fn(_a, _b) { Nil },
+      container_id: "test-container",
+      container_class: "sortable",
+      item_class: "item",
+      dragging_class: "dragging",
+      drag_over_class: "drag-over",
+      ghost_class: "ghost",
+      accept_from: [],
+    )
+
   // Test starting drag
   let #(new_state, maybe_reorder) =
-    sortable.update_sortable(sortable.StartDrag(1), initial_state)
-  let assert sortable.Dragging(1, option.None) = new_state
+    sortable.update_sortable(
+      sortable.StartDrag("test-container", 1),
+      initial_state,
+      config,
+    )
+  let assert sortable.Dragging("test-container", 1, option.None, option.None) =
+    new_state
   let assert option.None = maybe_reorder
 
   // Test drag enter
   let #(new_state2, maybe_reorder2) =
-    sortable.update_sortable(sortable.DragEnter(3), new_state)
-  let assert sortable.Dragging(1, option.Some(3)) = new_state2
+    sortable.update_sortable(
+      sortable.DragEnter("test-container", 3),
+      new_state,
+      config,
+    )
+  let assert sortable.Dragging(
+    "test-container",
+    1,
+    option.Some("test-container"),
+    option.Some(3),
+  ) = new_state2
   let assert option.None = maybe_reorder2
 
   // Test drop
   let #(final_state, maybe_reorder3) =
-    sortable.update_sortable(sortable.Drop(3), new_state2)
+    sortable.update_sortable(sortable.Drop("test-container", 3), new_state2, config)
   let assert sortable.NoDrag = final_state
-  let assert option.Some(#(1, 3)) = maybe_reorder3
+  let assert option.Some(sortable.SameContainer(1, 3)) = maybe_reorder3
 }

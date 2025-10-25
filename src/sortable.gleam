@@ -37,7 +37,7 @@ import lustre/element/html
 import lustre/event
 
 /// Configuration for a sortable container.
-/// 
+///
 /// - `on_reorder`: Callback function called when items are reordered with (from_index, to_index)
 /// - `container_id`: HTML id attribute for the container element
 /// - `container_class`: CSS classes to apply to the container (e.g., grid layout classes)
@@ -45,6 +45,7 @@ import lustre/event
 /// - `dragging_class`: CSS class applied to the item being dragged
 /// - `drag_over_class`: CSS class applied to the item being dragged over
 /// - `ghost_class`: CSS class for the drag ghost/placeholder
+/// - `accept_from`: List of container IDs that can drop items into this container (empty list = only same container)
 pub type SortableConfig(msg) {
   SortableConfig(
     on_reorder: fn(Int, Int) -> msg,
@@ -54,18 +55,42 @@ pub type SortableConfig(msg) {
     dragging_class: String,
     drag_over_class: String,
     ghost_class: String,
+    accept_from: List(String),
   )
 }
 
 /// Represents the current drag state of the sortable container.
-/// 
+///
 /// - `NoDrag`: No drag operation in progress
-/// - `Dragging`: Desktop drag in progress with source index and optional target index
-/// - `TouchDragging`: Mobile touch drag in progress with source and optional target index
+/// - `Dragging`: Desktop drag in progress with source container, index, and optional target
+/// - `TouchDragging`: Mobile touch drag in progress with source container, index, and optional target
 pub type DragState {
   NoDrag
-  Dragging(source_index: Int, over_index: Option(Int))
-  TouchDragging(source_index: Int, over_index: Option(Int))
+  Dragging(
+    source_container: String,
+    source_index: Int,
+    over_container: Option(String),
+    over_index: Option(Int),
+  )
+  TouchDragging(
+    source_container: String,
+    source_index: Int,
+    over_container: Option(String),
+    over_index: Option(Int),
+  )
+}
+
+/// Represents different types of reorder actions
+pub type ReorderAction {
+  /// Reordering within the same container
+  SameContainer(from_index: Int, to_index: Int)
+  /// Moving item from one container to another
+  CrossContainer(
+    from_container: String,
+    from_index: Int,
+    to_container: String,
+    to_index: Int,
+  )
 }
 
 /// A wrapper for items in a sortable list. The type is opaque to ensure
@@ -113,6 +138,7 @@ pub fn default_config(
     dragging_class: "sortable-dragging",
     drag_over_class: "sortable-drag-over",
     ghost_class: "sortable-ghost",
+    accept_from: [],
   )
 }
 
@@ -150,8 +176,8 @@ pub fn sortable_container(
 ) -> Element(SortableMsg(msg)) {
   let container_classes = case drag_state {
     NoDrag -> config.container_class
-    Dragging(_, _) -> config.container_class <> " sortable-active"
-    TouchDragging(_, _) -> config.container_class <> " sortable-active"
+    Dragging(_, _, _, _) -> config.container_class <> " sortable-active"
+    TouchDragging(_, _, _, _) -> config.container_class <> " sortable-active"
   }
 
   html.div(
@@ -177,16 +203,29 @@ fn render_sortable_item(
   render_item: fn(SortableItem(a), Int, DragState) -> Element(msg),
 ) -> Element(SortableMsg(msg)) {
   let is_dragging = case drag_state {
-    Dragging(source_index, _) -> source_index == index
-    TouchDragging(source_index, _) -> source_index == index
+    Dragging(source_container, source_index, _, _) ->
+      source_container == config.container_id && source_index == index
+    TouchDragging(source_container, source_index, _, _) ->
+      source_container == config.container_id && source_index == index
     NoDrag -> False
   }
 
   let is_drag_over = case drag_state {
-    Dragging(source_index, Some(over_index)) ->
-      over_index == index && source_index != index
-    TouchDragging(source_index, Some(over_index)) ->
-      over_index == index && source_index != index
+    Dragging(source_container, source_index, Some(over_container), Some(
+      over_index,
+    )) ->
+      over_container == config.container_id
+      && over_index == index
+      && { source_container != config.container_id || source_index != index }
+    TouchDragging(
+      source_container,
+      source_index,
+      Some(over_container),
+      Some(over_index),
+    ) ->
+      over_container == config.container_id
+      && over_index == index
+      && { source_container != config.container_id || source_index != index }
     _ -> False
   }
 
@@ -228,17 +267,19 @@ fn render_sortable_item(
         False -> "1"
       }),
       // HTML5 Drag and Drop events
-      event.on("dragstart", drag_start_decoder(index)),
+      event.on("dragstart", drag_start_decoder(config.container_id, index)),
       event.on("dragover", drag_over_decoder()) |> event.prevent_default,
-      event.on("dragenter", drag_enter_decoder(index)) |> event.prevent_default,
+      event.on("dragenter", drag_enter_decoder(config.container_id, index))
+        |> event.prevent_default,
       event.on("dragleave", drag_leave_decoder()) |> event.prevent_default,
-      event.on("drop", drop_decoder(index)) |> event.prevent_default,
+      event.on("drop", drop_decoder(config.container_id, index))
+        |> event.prevent_default,
       event.on("dragend", drag_end_decoder()) |> event.prevent_default,
       // Touch events for mobile support
-      event.on("touchstart", touch_start_decoder(index)),
+      event.on("touchstart", touch_start_decoder(config.container_id, index)),
       event.on("touchmove", touch_move_decoder()) |> event.prevent_default,
       event.on("touchend", touch_end_decoder()),
-      event.on("touchenter", touch_enter_decoder(index)),
+      event.on("touchenter", touch_enter_decoder(config.container_id, index)),
     ],
     [element.map(render_item(item, index, drag_state), UserMsg)],
   )
@@ -246,34 +287,34 @@ fn render_sortable_item(
 
 /// Messages emitted by the sortable container during drag and drop interactions.
 /// These should be handled in your application's update function.
-/// 
+///
 /// ## Desktop Events
-/// - `StartDrag(index)`: User starts dragging an item
-/// - `DragOver(index)`: User drags over an item  
-/// - `DragEnter(index)`: User drags into an item's area
+/// - `StartDrag(container_id, index)`: User starts dragging an item
+/// - `DragOver(index)`: User drags over an item
+/// - `DragEnter(container_id, index)`: User drags into an item's area
 /// - `DragLeave`: User drags out of an item's area
-/// - `Drop(index)`: User drops an item at a position
+/// - `Drop(container_id, index)`: User drops an item at a position
 /// - `DragEnd`: Drag operation ends (cleanup)
-/// 
-/// ## Mobile Events  
-/// - `TouchStart(index)`: User starts touch drag
+///
+/// ## Mobile Events
+/// - `TouchStart(container_id, index)`: User starts touch drag
 /// - `TouchMove`: User moves finger during drag
 /// - `TouchEnd`: User ends touch drag
-/// - `TouchEnter(index)`: Touch drag enters an item's area
-/// 
+/// - `TouchEnter(container_id, index)`: Touch drag enters an item's area
+///
 /// ## Other
 /// - `UserMsg(msg)`: Wrapper for user-defined messages from item rendering
 pub type SortableMsg(msg) {
-  StartDrag(Int)
+  StartDrag(container_id: String, index: Int)
   DragOver(Int)
-  DragEnter(Int)
+  DragEnter(container_id: String, index: Int)
   DragLeave
-  Drop(Int)
+  Drop(container_id: String, index: Int)
   DragEnd
-  TouchStart(Int)
+  TouchStart(container_id: String, index: Int)
   TouchMove
   TouchEnd
-  TouchEnter(Int)
+  TouchEnter(container_id: String, index: Int)
   UserMsg(msg)
 }
 
@@ -390,24 +431,33 @@ pub fn item_id(item: SortableItem(a)) -> String {
 }
 
 // Event decoders for HTML5 drag and drop
-fn drag_start_decoder(index: Int) -> decode.Decoder(SortableMsg(msg)) {
-  decode.success(StartDrag(index))
+fn drag_start_decoder(
+  container_id: String,
+  index: Int,
+) -> decode.Decoder(SortableMsg(msg)) {
+  decode.success(StartDrag(container_id, index))
 }
 
 fn drag_over_decoder() -> decode.Decoder(SortableMsg(msg)) {
   decode.success(DragOver(-1))
 }
 
-fn drag_enter_decoder(index: Int) -> decode.Decoder(SortableMsg(msg)) {
-  decode.success(DragEnter(index))
+fn drag_enter_decoder(
+  container_id: String,
+  index: Int,
+) -> decode.Decoder(SortableMsg(msg)) {
+  decode.success(DragEnter(container_id, index))
 }
 
 fn drag_leave_decoder() -> decode.Decoder(SortableMsg(msg)) {
   decode.success(DragLeave)
 }
 
-fn drop_decoder(index: Int) -> decode.Decoder(SortableMsg(msg)) {
-  decode.success(Drop(index))
+fn drop_decoder(
+  container_id: String,
+  index: Int,
+) -> decode.Decoder(SortableMsg(msg)) {
+  decode.success(Drop(container_id, index))
 }
 
 fn drag_end_decoder() -> decode.Decoder(SortableMsg(msg)) {
@@ -415,8 +465,11 @@ fn drag_end_decoder() -> decode.Decoder(SortableMsg(msg)) {
 }
 
 // Touch event decoders for mobile support
-fn touch_start_decoder(index: Int) -> decode.Decoder(SortableMsg(msg)) {
-  decode.success(TouchStart(index))
+fn touch_start_decoder(
+  container_id: String,
+  index: Int,
+) -> decode.Decoder(SortableMsg(msg)) {
+  decode.success(TouchStart(container_id, index))
 }
 
 fn touch_move_decoder() -> decode.Decoder(SortableMsg(msg)) {
@@ -427,39 +480,47 @@ fn touch_end_decoder() -> decode.Decoder(SortableMsg(msg)) {
   decode.success(TouchEnd)
 }
 
-fn touch_enter_decoder(index: Int) -> decode.Decoder(SortableMsg(msg)) {
-  decode.success(TouchEnter(index))
+fn touch_enter_decoder(
+  container_id: String,
+  index: Int,
+) -> decode.Decoder(SortableMsg(msg)) {
+  decode.success(TouchEnter(container_id, index))
 }
 
 /// Updates the drag state based on sortable messages and returns reorder information.
-/// 
+///
 /// This function should be called from your application's update function when
 /// handling `SortableMsg` events. It manages the drag state and returns information
-/// about when items should be reordered.
-/// 
+/// about when items should be reordered or moved between containers.
+///
 /// ## Arguments
-/// 
+///
 /// - `sortable_msg`: The sortable message to process
 /// - `drag_state`: The current drag state
-/// 
+/// - `config`: The sortable configuration (needed to check accept_from)
+///
 /// ## Returns
-/// 
+///
 /// A tuple containing:
 /// 1. The new `DragState` after processing the message
-/// 2. `Option(#(Int, Int))` - `Some(#(from_index, to_index))` if items should be reordered, `None` otherwise
-/// 
+/// 2. `Option(ReorderAction)` - Information about reorder/transfer action, `None` otherwise
+///
 /// ## Example
-/// 
+///
 /// ```gleam
 /// // In your update function
 /// MyMsg(sortable_msg) -> {
-///   let #(new_drag_state, maybe_reorder) = 
-///     sortable.update_sortable(sortable_msg, model.drag_state)
-///   
-///   case maybe_reorder {
-///     Some(#(from, to)) -> {
+///   let #(new_drag_state, maybe_action) =
+///     sortable.update_sortable(sortable_msg, model.drag_state, config)
+///
+///   case maybe_action {
+///     Some(sortable.SameContainer(from, to)) -> {
 ///       let new_items = sortable.reorder_list(model.items, from, to)
 ///       #(Model(..model, items: new_items, drag_state: new_drag_state), effect.none())
+///     }
+///     Some(sortable.CrossContainer(from_cont, from_idx, to_cont, to_idx)) -> {
+///       // Handle cross-container transfer
+///       ...
 ///     }
 ///     None -> {
 ///       #(Model(..model, drag_state: new_drag_state), effect.none())
@@ -470,68 +531,197 @@ fn touch_enter_decoder(index: Int) -> decode.Decoder(SortableMsg(msg)) {
 pub fn update_sortable(
   sortable_msg: SortableMsg(msg),
   drag_state: DragState,
-) -> #(DragState, Option(#(Int, Int))) {
+  config: SortableConfig(msg),
+) -> #(DragState, Option(ReorderAction)) {
   case sortable_msg {
-    StartDrag(index) -> {
-      #(Dragging(index, None), None)
+    StartDrag(container_id, index) -> {
+      #(Dragging(container_id, index, None, None), None)
     }
-    DragEnter(index) ->
+    DragEnter(container_id, index) ->
       case drag_state {
-        Dragging(source_index, _) -> #(
-          Dragging(source_index, Some(index)),
-          None,
-        )
+        Dragging(source_container, source_index, _, _) -> {
+          // Check if this container accepts drops from source container
+          let accepts =
+            source_container == container_id
+            || list.contains(config.accept_from, source_container)
+
+          case accepts {
+            True -> #(
+              Dragging(source_container, source_index, Some(container_id), Some(
+                index,
+              )),
+              None,
+            )
+            False -> #(drag_state, None)
+          }
+        }
+        TouchDragging(source_container, source_index, _, _) -> {
+          let accepts =
+            source_container == container_id
+            || list.contains(config.accept_from, source_container)
+
+          case accepts {
+            True -> #(
+              TouchDragging(
+                source_container,
+                source_index,
+                Some(container_id),
+                Some(index),
+              ),
+              None,
+            )
+            False -> #(drag_state, None)
+          }
+        }
         NoDrag -> #(drag_state, None)
-        TouchDragging(source_index, _) -> #(
-          TouchDragging(source_index, Some(index)),
-          None,
-        )
       }
     DragLeave -> #(drag_state, None)
-    Drop(target_index) ->
+    Drop(container_id, target_index) ->
       case drag_state {
-        Dragging(source_index, _) -> {
-          #(NoDrag, Some(#(source_index, target_index)))
+        Dragging(source_container, source_index, _, _) -> {
+          case source_container == container_id {
+            True -> #(
+              NoDrag,
+              Some(SameContainer(source_index, target_index)),
+            )
+            False -> {
+              // Check if drop is allowed
+              let accepts = list.contains(config.accept_from, source_container)
+              case accepts {
+                True -> #(
+                  NoDrag,
+                  Some(CrossContainer(
+                    source_container,
+                    source_index,
+                    container_id,
+                    target_index,
+                  )),
+                )
+                False -> #(NoDrag, None)
+              }
+            }
+          }
+        }
+        TouchDragging(source_container, source_index, _, _) -> {
+          case source_container == container_id {
+            True -> #(
+              NoDrag,
+              Some(SameContainer(source_index, target_index)),
+            )
+            False -> {
+              let accepts = list.contains(config.accept_from, source_container)
+              case accepts {
+                True -> #(
+                  NoDrag,
+                  Some(CrossContainer(
+                    source_container,
+                    source_index,
+                    container_id,
+                    target_index,
+                  )),
+                )
+                False -> #(NoDrag, None)
+              }
+            }
+          }
         }
         NoDrag -> #(drag_state, None)
-        TouchDragging(source_index, _) -> {
-          #(NoDrag, Some(#(source_index, target_index)))
-        }
       }
     DragEnd ->
       case drag_state {
-        Dragging(source_index, Some(target_index)) -> #(
-          NoDrag,
-          Some(#(source_index, target_index)),
-        )
+        Dragging(source_container, source_index, Some(target_container), Some(
+          target_index,
+        )) -> {
+          case source_container == target_container {
+            True -> #(
+              NoDrag,
+              Some(SameContainer(source_index, target_index)),
+            )
+            False -> {
+              let accepts = list.contains(config.accept_from, source_container)
+              case accepts {
+                True -> #(
+                  NoDrag,
+                  Some(CrossContainer(
+                    source_container,
+                    source_index,
+                    target_container,
+                    target_index,
+                  )),
+                )
+                False -> #(NoDrag, None)
+              }
+            }
+          }
+        }
         _ -> #(NoDrag, None)
       }
     DragOver(_) -> #(drag_state, None)
-    TouchStart(index) -> #(TouchDragging(index, None), None)
+    TouchStart(container_id, index) -> #(
+      TouchDragging(container_id, index, None, None),
+      None,
+    )
     TouchMove ->
       case drag_state {
-        TouchDragging(source_index, _) -> {
-          // Calculate which item we're over based on touch position
-          // For now, we'll use a simplified approach
-          #(TouchDragging(source_index, None), None)
+        TouchDragging(source_container, source_index, over_container, _) -> {
+          // Keep current state during move
+          #(TouchDragging(source_container, source_index, over_container, None), None)
         }
         _ -> #(drag_state, None)
       }
     TouchEnd ->
       case drag_state {
-        TouchDragging(source_index, Some(target_index)) -> #(
-          NoDrag,
-          Some(#(source_index, target_index)),
-        )
-        TouchDragging(_, None) -> #(NoDrag, None)
+        TouchDragging(
+          source_container,
+          source_index,
+          Some(target_container),
+          Some(target_index),
+        ) -> {
+          case source_container == target_container {
+            True -> #(
+              NoDrag,
+              Some(SameContainer(source_index, target_index)),
+            )
+            False -> {
+              let accepts = list.contains(config.accept_from, source_container)
+              case accepts {
+                True -> #(
+                  NoDrag,
+                  Some(CrossContainer(
+                    source_container,
+                    source_index,
+                    target_container,
+                    target_index,
+                  )),
+                )
+                False -> #(NoDrag, None)
+              }
+            }
+          }
+        }
+        TouchDragging(_, _, _, _) -> #(NoDrag, None)
         _ -> #(NoDrag, None)
       }
-    TouchEnter(index) ->
+    TouchEnter(container_id, index) ->
       case drag_state {
-        TouchDragging(source_index, _) -> #(
-          TouchDragging(source_index, Some(index)),
-          None,
-        )
+        TouchDragging(source_container, source_index, _, _) -> {
+          let accepts =
+            source_container == container_id
+            || list.contains(config.accept_from, source_container)
+
+          case accepts {
+            True -> #(
+              TouchDragging(
+                source_container,
+                source_index,
+                Some(container_id),
+                Some(index),
+              ),
+              None,
+            )
+            False -> #(drag_state, None)
+          }
+        }
         _ -> #(drag_state, None)
       }
     UserMsg(_) -> #(drag_state, None)
