@@ -26,7 +26,6 @@
 ///   render_item_fn
 /// )
 /// ```
-
 import gleam/bool
 import gleam/dynamic/decode
 import gleam/int
