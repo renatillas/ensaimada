@@ -1,8 +1,9 @@
 # Ensaimada
 
+A drag-and-drop sortable list library for Gleam/Lustre with full support for both desktop and mobile devices.
+
 <img alt="Ensaimadas de Mallorca" src="https://github.com/user-attachments/assets/8a3a829c-8cd1-48af-b36c-bd00f5480b91" />
 
-A drag-and-drop sortable list library for Gleam/Lustre with full support for both desktop and mobile devices.
 
 ## Features
 
