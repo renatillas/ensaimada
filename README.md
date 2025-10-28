@@ -1,4 +1,4 @@
-# sortable
+# Ensaimada
 
 A drag-and-drop sortable list library for Gleam/Lustre with full support for both desktop and mobile devices.
 
@@ -13,10 +13,10 @@ A drag-and-drop sortable list library for Gleam/Lustre with full support for bot
 
 ## Installation
 
-Add `sortable` to your Gleam project:
+Add `ensaimada` to your Gleam project:
 
 ```sh
-gleam add sortable
+gleam add ensaimada
 ```
 
 ## Quick Start
@@ -26,14 +26,14 @@ import gleam/list
 import lustre
 import lustre/element.{type Element}
 import lustre/element/html
-import sortable
+import ensaimada
 
 pub type Model {
-  Model(items: List(String), drag_state: sortable.DragState)
+  Model(items: List(String), drag_state: ensaimada.DragState)
 }
 
 pub type Msg {
-  SortableMsg(sortable.SortableMsg(Msg))
+  SortableMsg(ensaimada.SortableMsg(Msg))
   Reorder(Int, Int)
 }
 

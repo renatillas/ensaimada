@@ -12,14 +12,14 @@
 /// ## Basic Usage
 ///
 /// ```gleam
-/// import sortable
+/// import ensaimada
 /// 
-/// let config = sortable.default_config(
+/// let config = ensaimada.default_config(
 ///   fn(from, to) { MyReorderMsg(from, to) },
 ///   "my-sortable-container"
 /// )
 /// 
-/// sortable.sortable_container(
+/// ensaimada.container(
 ///   config,
 ///   drag_state,
 ///   items,
@@ -46,8 +46,8 @@ import lustre/event
 /// - `drag_over_class`: CSS class applied to the item being dragged over
 /// - `ghost_class`: CSS class for the drag ghost/placeholder
 /// - `accept_from`: List of container IDs that can drop items into this container (empty list = only same container)
-pub type SortableConfig(msg) {
-  SortableConfig(
+pub type Config(msg) {
+  Config(
     on_reorder: fn(Int, Int) -> msg,
     container_id: String,
     container_class: String,
@@ -96,10 +96,10 @@ pub type ReorderAction {
 /// A wrapper for items in a sortable list. The type is opaque to ensure
 /// proper encapsulation of the item data and metadata.
 /// 
-/// Use `create_sortable_item` to create instances and accessor functions
+/// Use `ensaimada.item()` to create instances and accessor functions
 /// to retrieve data.
-pub opaque type SortableItem(a) {
-  SortableItem(id: String, data: a)
+pub opaque type Item(a) {
+  Item(id: String, data: a)
 }
 
 /// Creates a default sortable configuration with standard CSS classes.
@@ -111,7 +111,7 @@ pub opaque type SortableItem(a) {
 /// 
 /// ## Returns
 /// 
-/// A `SortableConfig` with default CSS classes:
+/// A `Config` with default CSS classes:
 /// - Container: "sortable-container"
 /// - Item: "sortable-item"  
 /// - Dragging: "sortable-dragging"
@@ -121,7 +121,7 @@ pub opaque type SortableItem(a) {
 /// ## Example
 /// 
 /// ```gleam
-/// let config = sortable.default_config(
+/// let config = ensaimada.default_config(
 ///   fn(from, to) { ReorderImages(from, to) },
 ///   "image-grid"
 /// )
@@ -129,8 +129,8 @@ pub opaque type SortableItem(a) {
 pub fn default_config(
   on_reorder: fn(Int, Int) -> msg,
   container_id: String,
-) -> SortableConfig(msg) {
-  SortableConfig(
+) -> Config(msg) {
+  Config(
     on_reorder: on_reorder,
     container_id: container_id,
     container_class: "sortable-container",
@@ -154,26 +154,26 @@ pub fn default_config(
 /// ## Returns
 /// 
 /// A Lustre `Element` that handles drag and drop events and renders the sortable items.
-/// The element emits `SortableMsg` events that should be handled in your update function.
+/// The element emits `Config` events that should be handled in your update function.
 /// 
 /// ## Example
 /// 
 /// ```gleam
-/// sortable.sortable_container(
+/// ensaimada.container(
 ///   config,
 ///   model.drag_state,
 ///   model.items |> list.index_map(fn(item, i) {
-///     sortable.create_sortable_item("item-" <> int.to_string(i), item)
+///     ensaimada.item("item-" <> int.to_string(i), item)
 ///   }),
 ///   fn(item, index, drag_state) { render_my_item(item, index, drag_state) }
 /// )
 /// ```
-pub fn sortable_container(
-  config: SortableConfig(msg),
+pub fn container(
+  config: Config(msg),
   drag_state: DragState,
-  items: List(SortableItem(a)),
-  render_item: fn(SortableItem(a), Int, DragState) -> Element(msg),
-) -> Element(SortableMsg(msg)) {
+  items: List(Item(a)),
+  render_item: fn(Item(a), Int, DragState) -> Element(msg),
+) -> Element(Msg(msg)) {
   let container_classes = case drag_state {
     NoDrag -> config.container_class
     Dragging(_, _, _, _) -> config.container_class <> " sortable-active"
@@ -196,12 +196,12 @@ pub fn sortable_container(
 }
 
 fn render_sortable_item(
-  config: SortableConfig(msg),
+  config: Config(msg),
   drag_state: DragState,
-  item: SortableItem(a),
+  item: Item(a),
   index: Int,
-  render_item: fn(SortableItem(a), Int, DragState) -> Element(msg),
-) -> Element(SortableMsg(msg)) {
+  render_item: fn(Item(a), Int, DragState) -> Element(msg),
+) -> Element(Msg(msg)) {
   let is_dragging = case drag_state {
     Dragging(source_container, source_index, _, _) ->
       source_container == config.container_id && source_index == index
@@ -290,24 +290,7 @@ fn render_sortable_item(
 
 /// Messages emitted by the sortable container during drag and drop interactions.
 /// These should be handled in your application's update function.
-///
-/// ## Desktop Events
-/// - `StartDrag(container_id, index)`: User starts dragging an item
-/// - `DragOver(index)`: User drags over an item
-/// - `DragEnter(container_id, index)`: User drags into an item's area
-/// - `DragLeave`: User drags out of an item's area
-/// - `Drop(container_id, index)`: User drops an item at a position
-/// - `DragEnd`: Drag operation ends (cleanup)
-///
-/// ## Mobile Events
-/// - `TouchStart(container_id, index)`: User starts touch drag
-/// - `TouchMove`: User moves finger during drag
-/// - `TouchEnd`: User ends touch drag
-/// - `TouchEnter(container_id, index)`: Touch drag enters an item's area
-///
-/// ## Other
-/// - `UserMsg(msg)`: Wrapper for user-defined messages from item rendering
-pub type SortableMsg(msg) {
+pub type Msg(msg) {
   StartDrag(container_id: String, index: Int)
   DragOver(Int)
   DragEnter(container_id: String, index: Int)
@@ -338,38 +321,30 @@ pub type SortableMsg(msg) {
 /// 
 /// ```gleam
 /// let items = [1, 2, 3, 4, 5]
-/// let reordered = sortable.reorder_list(items, 1, 3)
+/// let reordered = ensaimada.reorder(items, 1, 3)
 /// // Result: [1, 3, 4, 2, 5] (moved item at index 1 to index 3)
 /// ```
-pub fn reorder_list(items: List(a), from_index: Int, to_index: Int) -> List(a) {
-  case from_index == to_index {
-    True -> items
-    False -> {
-      let item_count = list.length(items)
-      case
-        from_index >= 0
-        && from_index < item_count
-        && to_index >= 0
-        && to_index < item_count
-      {
-        True -> {
-          case list.split(items, from_index) {
-            #(before_from, after_from) -> {
-              case after_from {
-                [moving_item, ..rest_after_from] -> {
-                  let without_moving_item =
-                    list.append(before_from, rest_after_from)
-                  case list.split(without_moving_item, to_index) {
-                    #(before_to, after_to) ->
-                      list.append(before_to, [moving_item, ..after_to])
-                  }
-                }
-                [] -> items
-              }
-            }
+pub fn reorder(items: List(a), from_index: Int, to_index: Int) -> List(a) {
+  let item_count = list.length(items)
+  use <- bool.guard(
+    from_index == to_index
+      || from_index < 0
+      || to_index < 0
+      || from_index >= item_count
+      || to_index >= item_count,
+    items,
+  )
+  case list.split(items, from_index) {
+    #(before_from, after_from) -> {
+      case after_from {
+        [moving_item, ..rest_after_from] -> {
+          let without_moving_item = list.append(before_from, rest_after_from)
+          case list.split(without_moving_item, to_index) {
+            #(before_to, after_to) ->
+              list.append(before_to, [moving_item, ..after_to])
           }
         }
-        False -> items
+        [] -> items
       }
     }
   }
@@ -377,22 +352,11 @@ pub fn reorder_list(items: List(a), from_index: Int, to_index: Int) -> List(a) {
 
 /// Creates a new sortable item with the given id and data.
 /// 
-/// ## Arguments
-/// 
-/// - `id`: Unique identifier for the item (used for DOM element ids)
-/// - `data`: The actual data to store in this sortable item
-/// 
-/// ## Returns
-/// 
-/// A `SortableItem` that can be used in sortable containers.
-/// 
-/// ## Example
-/// 
 /// ```gleam
-/// let item = sortable.create_sortable_item("image-1", my_image_data)
+/// let item = ensaimada.item("image-1", my_image_data)
 /// ```
-pub fn create_sortable_item(id: String, data: a) -> SortableItem(a) {
-  SortableItem(id: id, data: data)
+pub fn item(id: String, data: a) -> Item(a) {
+  Item(id: id, data: data)
 }
 
 /// Extracts the data from a sortable item.
@@ -408,9 +372,9 @@ pub fn create_sortable_item(id: String, data: a) -> SortableItem(a) {
 /// ## Example
 /// 
 /// ```gleam
-/// let data = sortable.item_data(item)
+/// let data = ensaimada.item_data(item)
 /// ```
-pub fn item_data(item: SortableItem(a)) -> a {
+pub fn item_data(item: Item(a)) -> a {
   item.data
 }
 
@@ -427,9 +391,9 @@ pub fn item_data(item: SortableItem(a)) -> a {
 /// ## Example
 /// 
 /// ```gleam
-/// let id = sortable.item_id(item)
+/// let id = ensaimada.item_id(item)
 /// ```
-pub fn item_id(item: SortableItem(a)) -> String {
+pub fn item_id(item: Item(a)) -> String {
   item.id
 }
 
@@ -437,33 +401,30 @@ pub fn item_id(item: SortableItem(a)) -> String {
 fn drag_start_decoder(
   container_id: String,
   index: Int,
-) -> decode.Decoder(SortableMsg(msg)) {
+) -> decode.Decoder(Msg(msg)) {
   decode.success(StartDrag(container_id, index))
 }
 
-fn drag_over_decoder() -> decode.Decoder(SortableMsg(msg)) {
+fn drag_over_decoder() -> decode.Decoder(Msg(msg)) {
   decode.success(DragOver(-1))
 }
 
 fn drag_enter_decoder(
   container_id: String,
   index: Int,
-) -> decode.Decoder(SortableMsg(msg)) {
+) -> decode.Decoder(Msg(msg)) {
   decode.success(DragEnter(container_id, index))
 }
 
-fn drag_leave_decoder() -> decode.Decoder(SortableMsg(msg)) {
+fn drag_leave_decoder() -> decode.Decoder(Msg(msg)) {
   decode.success(DragLeave)
 }
 
-fn drop_decoder(
-  container_id: String,
-  index: Int,
-) -> decode.Decoder(SortableMsg(msg)) {
+fn drop_decoder(container_id: String, index: Int) -> decode.Decoder(Msg(msg)) {
   decode.success(Drop(container_id, index))
 }
 
-fn drag_end_decoder() -> decode.Decoder(SortableMsg(msg)) {
+fn drag_end_decoder() -> decode.Decoder(Msg(msg)) {
   decode.success(DragEnd)
 }
 
@@ -471,22 +432,22 @@ fn drag_end_decoder() -> decode.Decoder(SortableMsg(msg)) {
 fn touch_start_decoder(
   container_id: String,
   index: Int,
-) -> decode.Decoder(SortableMsg(msg)) {
+) -> decode.Decoder(Msg(msg)) {
   decode.success(TouchStart(container_id, index))
 }
 
-fn touch_move_decoder() -> decode.Decoder(SortableMsg(msg)) {
+fn touch_move_decoder() -> decode.Decoder(Msg(msg)) {
   decode.success(TouchMove)
 }
 
-fn touch_end_decoder() -> decode.Decoder(SortableMsg(msg)) {
+fn touch_end_decoder() -> decode.Decoder(Msg(msg)) {
   decode.success(TouchEnd)
 }
 
 fn touch_enter_decoder(
   container_id: String,
   index: Int,
-) -> decode.Decoder(SortableMsg(msg)) {
+) -> decode.Decoder(Msg(msg)) {
   decode.success(TouchEnter(container_id, index))
 }
 
@@ -514,14 +475,14 @@ fn touch_enter_decoder(
 /// // In your update function
 /// MyMsg(sortable_msg) -> {
 ///   let #(new_drag_state, maybe_action) =
-///     sortable.update_sortable(sortable_msg, model.drag_state, config)
+///     ensaimada.update(sortable_msg, model.drag_state, config)
 ///
 ///   case maybe_action {
-///     Some(sortable.SameContainer(from, to)) -> {
-///       let new_items = sortable.reorder_list(model.items, from, to)
+///     Some(ensaimada.SameContainer(from, to)) -> {
+///       let new_items = ensaimada.reorder(model.items, from, to)
 ///       #(Model(..model, items: new_items, drag_state: new_drag_state), effect.none())
 ///     }
-///     Some(sortable.CrossContainer(from_cont, from_idx, to_cont, to_idx)) -> {
+///     Some(ensaimada.CrossContainer(from_cont, from_idx, to_cont, to_idx)) -> {
 ///       // Handle cross-container transfer
 ///       ...
 ///     }
@@ -531,10 +492,10 @@ fn touch_enter_decoder(
 ///   }
 /// }
 /// ```
-pub fn update_sortable(
-  sortable_msg: SortableMsg(msg),
+pub fn update(
+  sortable_msg: Msg(msg),
   drag_state: DragState,
-  config: SortableConfig(msg),
+  config: Config(msg),
 ) -> #(DragState, Option(ReorderAction)) {
   case sortable_msg {
     StartDrag(container_id, index) -> {
