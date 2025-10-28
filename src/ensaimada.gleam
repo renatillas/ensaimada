@@ -152,9 +152,9 @@ pub fn default_config(
 /// - `render_item`: Function to render individual items, receives (item, index, drag_state)
 /// 
 /// ## Returns
-/// 
+///
 /// A Lustre `Element` that handles drag and drop events and renders the sortable items.
-/// The element emits `Config` events that should be handled in your update function.
+/// The element emits `Msg` events that should be handled in your update function.
 /// 
 /// ## Example
 /// 
@@ -454,7 +454,7 @@ fn touch_enter_decoder(
 /// Updates the drag state based on sortable messages and returns reorder information.
 ///
 /// This function should be called from your application's update function when
-/// handling `SortableMsg` events. It manages the drag state and returns information
+/// handling `Msg` events. It manages the drag state and returns information
 /// about when items should be reordered or moved between containers.
 ///
 /// ## Arguments

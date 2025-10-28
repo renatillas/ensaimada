@@ -36,20 +36,20 @@ pub type Model {
 }
 
 pub type Msg {
-  SortableMsg(ensaimada.SortableMsg(Msg))
+  SortableMsg(ensaimada.Msg(Msg))
   Reorder(Int, Int)
 }
 
 pub fn update(model: Model, msg: Msg) -> Model {
   case msg {
     SortableMsg(sortable_msg) -> {
-      let config = sortable.default_config(Reorder, "my-list")
+      let config = ensaimada.default_config(Reorder, "my-list")
       let #(new_drag_state, maybe_action) =
-        sortable.update_sortable(sortable_msg, model.drag_state, config)
+        ensaimada.update(sortable_msg, model.drag_state, config)
 
       case maybe_action {
-        option.Some(sortable.SameContainer(from, to)) -> {
-          let new_items = sortable.reorder_list(model.items, from, to)
+        option.Some(ensaimada.SameContainer(from, to)) -> {
+          let new_items = ensaimada.reorder(model.items, from, to)
           Model(..model, items: new_items, drag_state: new_drag_state)
         }
         _ -> Model(..model, drag_state: new_drag_state)
@@ -60,19 +60,19 @@ pub fn update(model: Model, msg: Msg) -> Model {
 }
 
 pub fn view(model: Model) -> Element(Msg) {
-  let config = sortable.default_config(Reorder, "my-list")
+  let config = ensaimada.default_config(Reorder, "my-list")
 
   let sortable_items =
     list.index_map(model.items, fn(item, i) {
-      sortable.create_sortable_item("item-" <> int.to_string(i), item)
+      ensaimada.item("item-" <> int.to_string(i), item)
     })
 
-  sortable.sortable_container(
+  ensaimada.container(
     config,
     model.drag_state,
     sortable_items,
     fn(item, _index, _drag_state) {
-      html.div([], [html.text(sortable.item_data(item))])
+      html.div([], [html.text(ensaimada.item_data(item))])
     },
   )
   |> element.map(SortableMsg)
@@ -119,13 +119,13 @@ The library uses CSS classes for styling. Here's an example CSS setup:
 To enable dragging between multiple containers:
 
 ```gleam
-let config1 = sortable.SortableConfig(
-  ..sortable.default_config(Reorder, "container-1"),
+let config1 = ensaimada.Config(
+  ..ensaimada.default_config(Reorder, "container-1"),
   accept_from: ["container-2"]
 )
 
-let config2 = sortable.SortableConfig(
-  ..sortable.default_config(Reorder, "container-2"),
+let config2 = ensaimada.Config(
+  ..ensaimada.default_config(Reorder, "container-2"),
   accept_from: ["container-1"]
 )
 ```
@@ -134,7 +134,7 @@ Then handle `CrossContainer` actions in your update function:
 
 ```gleam
 case maybe_action {
-  Some(sortable.CrossContainer(from_cont, from_idx, to_cont, to_idx)) -> {
+  Some(ensaimada.CrossContainer(from_cont, from_idx, to_cont, to_idx)) -> {
     // Remove from source container and add to target container
     ...
   }
